@@ -1,5 +1,5 @@
 ---
-title: "Text Sentiment Analysis of ??"
+title: "Text Sentiment Analysis of the Resilient Merced Report"
 subtitle: "ESM 244 - Assignment 3 Task 1"
 author: "Minnie Ringland"
 date: "Feb 25, 2021"
@@ -7,7 +7,7 @@ output:
   html_document:
     theme: paper
     code_folding: hide
-    highlight: zenburn
+    highlight: espresso
     toc: true
     toc_float: true
 ---
@@ -17,10 +17,168 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 library(tidyverse) #for everything
 library(here) # for file reference
+library(tidytext) # for text analysis
+#library(textdata)
+library(pdftools) # for reading in PDFs
+library(kableExtra) # for making tables
+library(ggwordcloud) # for wordclouds
+
+```
+
+***  
+
+
+### About the Report
+
+In 2016, two California senate bills were passed that identified conservation and management of **natural and working lands** as a key strategy to meeting emission goals. In response, the California Air Resources Board (CARB) [https://ww2.arb.ca.gov/nwl-inventory], which spearheads the state’s climate response, laid out goals to develop a statewide carbon inventory. Later that year, the County of Merced partnered with the state Department of Conservation and The Nature Conservancy to pilot a scenario planning tool to allow individual jurisdictions to quantify and project carbon storage in natural and working lands on a more local level.
+
+This tool is called TerraCount, and the Resilient Merced report describes how the tool was developed, how it can be used, and the results of the study in Merced County.
+
+Today, we'll be exploring the text of the report to highlight key terms, and analyze the tone or sentiment of the report.
+
+
+```{r read PDFs, cache = TRUE}
+# Read in the pdfs
+merced_text <- pdf_text(here("pdfs","resilientcountiesguide_1_.pdf"))
+sb_text <- pdf_text(here("pdfs","2016_ghg.pdf"))
+```
+
+
+***
+
+
+The PDF text is initially read in as a character vector - a single, very long row of text. To wrangle this into a workable dataset, I need to:  
+- convert to tidyverse dataframe  
+- use `str_split()` to break by line (using '\n')  
+- remove excess white space  
+- remove introductory text (table of contents, acknowledgments, etc)  
+- split by section/chapter  
+- split each word into its own row  
+- remove stopwords  
+
+
+```{r tidy and wrangle}
+# Turn into a tidyverse df, split by line
+merced_tidy <- data.frame(merced_text) %>% 
+  mutate(text_full = str_split(merced_text, pattern = '\\n')) %>% 
+  unnest(text_full) %>% 
+  mutate(text_full = str_trim(text_full)) %>% # remove white space
+  slice(-(1:188)) %>% # slice to remove doc intro
+  mutate(section = str_extract(
+                      case_when(
+                      str_detect(text_full, pattern = "Section \\d:") ~ text_full, # split by Section (chapter)
+                      TRUE ~ NA_character_),
+                      "\\d")) %>% 
+  fill(section)
+
+#merced_test <- head(merced_tidy,1)
+#pattern <- "Section \\d:"
+#str_detect(merced_test, pattern)
+#unique(merced_tidy$section)
+
+# Finally, split so that each word has it's own row, i.e. "tokenize"
+merced_tokens <- merced_tidy %>% 
+  unnest_tokens(word, text_full) %>% 
+  select(-merced_text) %>% 
+  anti_join(stop_words) # and remove stopwords
+
+```
+
+We are left with a dataset containing only the words of interest, organized by document section. We can see that each section use the following number of unique words.
+
+```{r unique words}
+merced_wordcount <- merced_tokens %>% 
+  group_by(section) %>% 
+  summarize(words = n_distinct(word))
+
+kable(merced_wordcount, caption = "Table 1. Unique words in each section of Resilient Merced") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+***  
+### Most Frequently Used Words
+
+```{r top 5 and top 50}
+merced_counts <- merced_tokens %>% 
+  count(section, word)
+
+top_5_words <- merced_counts %>% 
+  group_by(section) %>% 
+  arrange(-n) %>% 
+  slice(1:5)
+
+ggplot(data = top_5_words, aes(x= word, y = n)) +
+  geom_col(fill = "blue") +
+  facet_wrap(~section, scales = "free") +
+  coord_flip()
+
+merced_top50 <- merced_counts %>% 
+  arrange(-n) %>% 
+  slice(1:50)
+
+ggplot(data = merced_top50, aes(label = word)) +
+  geom_text_wordcloud(aes(color = n, size = n), shape = "square") +
+  scale_size_area() +
+  scale_color_gradientn(colors = c("darkgreen","green")) +
+  theme_minimal()
 
 ```
 
 
-## About the Data
 
-The 
+***  
+### Sentiment Analysis
+
+```{r sentiment analysis with afinn}
+merced_afinn <- merced_tokens %>% 
+  inner_join(get_sentiments("afinn"))
+
+afinn_counts <- merced_afinn %>% 
+  count(section, value)
+
+ggplot(data = afinn_counts, aes(x = value, y = n)) +
+  geom_col() +
+  facet_wrap(~section)
+
+# Find the mean afinn score by chapter: 
+afinn_means <- merced_afinn %>% 
+  group_by(section) %>% 
+  summarize(mean_afinn = mean(value))
+
+afinn_plot <- ggplot(data = afinn_means,
+       aes(x = section, y = mean_afinn)) +
+  geom_col() +
+  coord_flip()
+
+```
+
+```{r sentiment analysis with bing}
+merced_bing <- merced_tokens %>% 
+  inner_join(get_sentiments("bing"))
+
+bing_counts <- merced_bing %>% 
+  count(section, sentiment)
+
+ggplot(data = bing_counts, aes(x = sentiment, y = n)) +
+  geom_col() +
+  facet_wrap(~section)
+
+```
+```{r sentiment analysis with nrc}
+merced_nrc <- merced_tokens %>% 
+  inner_join(get_sentiments("nrc"))
+
+nrc_counts <- merced_nrc %>% 
+  count(section, sentiment)
+
+ggplot(data = nrc_counts, aes(x = sentiment, y = n)) +
+  geom_col() +
+  facet_wrap(~section) +
+  coord_flip()
+```
+
+***
+
+**Data Source:**
+
+*Resilient Merced: A County Guide to Advance Climate Change Mitigation and Complementary Benefits through Land Management and Conservation.* California Department of Conservation and The Nature Conservancy. Published 2019. Available for download at https://maps.conservation.ca.gov/TerraCount/downloads/
