@@ -1,0 +1,120 @@
+---
+title: "Raster Data"
+subtitle: "ESM 244 - Assignment 3 Task 2"
+author: "Minnie Ringland"
+date: "Feb 25, 2021"
+output:
+  html_document:
+    theme: yeti
+    code_folding: hide
+    highlight: haddock
+    toc: true
+    toc_float: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+library(raster) ### NOTE: attaching this BEFORE tidyverse
+library(tidyverse)
+library(here)
+library(sf)
+library(fasterize)
+library(rnaturalearth)
+#library(rgeos)
+```
+***  
+
+
+### About the Data
+
+AquaMaps (Kaschner, K., Rius-Barile, J., Kesner-Reyes, K., Garilao, C., Kullander,
+S., Rees, T., & Froese, R. (2016). AquaMaps: Predicted range maps for aquatic
+species. www.aquamaps.org), showing the probability of occurrence (based on relative
+environmental suitability, including species preferences for water temperature, depth,
+salinity, and distance to land) of 35 cetacean species that can be found in the California
+Bight. The extent of the rasters is 125° W to 115°W (which R considers -125 to -115)
+and 32°N to 38°N.
+
+
+Create a raster of species richness of cetacean species off the coast of
+California. Species richness is simply the number of species that occur in a
+particular location.
+○ With probability of occurrence data such as AquaMaps, it is common to
+decide on a threshold value above which a species is considered
+“present.” Choose a probability threshold (a threshold of .6, or higher will
+result in more interesting maps), and use your threshold to reclassify each
+probability layer to a “presence” layer of either 0 (not present) or 1
+(present).
+
+```{r, cache = TRUE}
+# Create a list of files to use and rasterize as a stack
+
+aquamap_files <- list.files(path = here("ca_cetaceans"), full.names = TRUE, pattern = "*.tif")
+
+aq_stack <- raster::stack(aquamap_files)
+smaller_aq <- raster::aggregate(aq_stack, fact = 2, fun = mean) # Use this smaller/faster version to build code
+
+plot(smaller_aq)
+```
+
+Set a threshold for presence probability --> 0.7:
+
+```{r set presence threshold}
+
+is_present <- function(x, thresh = 0.7) {
+  y <- ifelse(x >= thresh, 1, 0)
+  return(y)
+}
+
+presence <- calc(smaller_aq, fun = is_present)
+plot(presence, col = 'blue4')
+
+```
+
+***
+```{r coastline}
+coast <- ne_coastline(returnclass = "sf")
+
+coast_df <- coast %>% 
+  as.data.frame()
+
+#coast_df <- raster::rasterToPoints(coast) %>%
+#  as.data.frame()
+
+```
+
+
+`ggplot` likes dataframes - not rasters - so we have to convert our raster to a dataframe. 
+```{r calculate richness}
+
+richness <- calc(presence, fun = sum, na.rm = TRUE)
+
+species_df <- raster::rasterToPoints(richness) %>%
+  as.data.frame()
+
+```
+
+
+
+```{r plotting, fig.cap="**Figure 1.** Cetacean Species Richness along the California Coast, using threshold probability > 0.7"}
+
+ggplot() +
+  geom_raster(data = species_df, aes(x = x, y = y, fill = layer), alpha = 0.6) +
+  geom_sf(data = coast, size = 1.5, color = "grey", label = "California Coastline") +
+  coord_sf(xlim = c(-130, -114), ylim = c(31, 39)) +
+  scale_fill_gradient(low = 'lemonchiffon1', high = 'lawngreen') +
+  labs(x = "Longitude", y = "Latitude", title = "Cetacean Species Richness", fill = "Number of Species Present") +
+  theme_minimal() #+
+  #theme(panel.background = element_rect(fill = 'slateblue4'))
+
+```
+
+min(species_df$x), max(species_df$x)),
+           ylim = c(min(species_df$y), max(species_df$y))
+
+***
+
+**Data Source:**
+
