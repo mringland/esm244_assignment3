@@ -1,0 +1,26 @@
+---
+title: "Text Sentiment Analysis of ??"
+subtitle: "ESM 244 - Assignment 3 Task 1"
+author: "Minnie Ringland"
+date: "Feb 25, 2021"
+output:
+  html_document:
+    theme: paper
+    code_folding: hide
+    highlight: zenburn
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+library(tidyverse) #for everything
+library(here) # for file reference
+
+```
+
+
+## About the Data
+
+The 
