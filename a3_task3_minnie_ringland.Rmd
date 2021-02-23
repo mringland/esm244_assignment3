@@ -1,6 +1,6 @@
 ---
 title: "Text Sentiment Analysis of the Resilient Merced Report"
-subtitle: "ESM 244 - Assignment 3 Task 1"
+subtitle: "ESM 244 - Assignment 3 Task 3"
 author: "Minnie Ringland"
 date: "Feb 25, 2021"
 output:
@@ -16,6 +16,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 library(tidyverse) #for everything
+#library(dplyr)
 library(here) # for file reference
 library(tidytext) # for text analysis
 #library(textdata)
@@ -30,7 +31,7 @@ library(ggwordcloud) # for wordclouds
 
 ### About the Report
 
-In 2016, two California senate bills were passed that identified conservation and management of **natural and working lands** as a key strategy to meeting emission goals. In response, the California Air Resources Board (CARB) [https://ww2.arb.ca.gov/nwl-inventory], which spearheads the state’s climate response, laid out goals to develop a statewide carbon inventory. Later that year, the County of Merced partnered with the state Department of Conservation and The Nature Conservancy to pilot a scenario planning tool to allow individual jurisdictions to quantify and project carbon storage in natural and working lands on a more local level.
+In 2016, two California senate bills were passed that identified conservation and management of **natural and working lands** as a key strategy to meeting emission goals. In response, the California Air Resources Board ([CARB](https://ww2.arb.ca.gov/nwl-inventory)), which spearheads the state’s climate response, laid out goals to develop a statewide carbon inventory. Later that year, the County of Merced partnered with the state Department of Conservation and The Nature Conservancy to pilot a scenario planning tool to allow individual jurisdictions to quantify and project carbon storage in natural and working lands on a more local level.
 
 This tool is called TerraCount, and the Resilient Merced report describes how the tool was developed, how it can be used, and the results of the study in Merced County.
 
@@ -40,16 +41,15 @@ Today, we'll be exploring the text of the report to highlight key terms, and ana
 ```{r read PDFs, cache = TRUE}
 # Read in the pdfs
 merced_text <- pdf_text(here("pdfs","resilientcountiesguide_1_.pdf"))
-sb_text <- pdf_text(here("pdfs","2016_ghg.pdf"))
+#sb_text <- pdf_text(here("pdfs","2016_ghg.pdf"))
 ```
 
 
 ***
 
-
 The PDF text is initially read in as a character vector - a single, very long row of text. To wrangle this into a workable dataset, I need to:  
 - convert to tidyverse dataframe  
-- use `str_split()` to break by line (using '\n')  
+- use `str_split()` to break by line (using " \n ")  
 - remove excess white space  
 - remove introductory text (table of contents, acknowledgments, etc)  
 - split by section/chapter  
@@ -84,61 +84,88 @@ merced_tokens <- merced_tidy %>%
 
 ```
 
-We are left with a dataset containing only the words of interest, organized by document section. We can see that each section use the following number of unique words.
+We are left with a dataset containing only the words of interest, organized by document section. We can see that each section uses the following number of unique words.
 
 ```{r unique words}
 merced_wordcount <- merced_tokens %>% 
   group_by(section) %>% 
   summarize(words = n_distinct(word))
 
-kable(merced_wordcount, caption = "Table 1. Unique words in each section of Resilient Merced") %>% 
-  kable_styling(bootstrap_options = c("striped", "hover"))
+kable(merced_wordcount, caption = "Table 1. Unique non-stopwords in each section of Resilient Merced") %>%
+  kable_styling(width = 5, bootstrap_options = c("striped", "hover"))
 ```
 
 ***  
 ### Most Frequently Used Words
 
-```{r top 5 and top 50}
+Which words were used most frequently in each section?
+
+```{r top 5, fig.cap="Figure 1. Top 5 words by section of Resilient Merced"}
+
 merced_counts <- merced_tokens %>% 
   count(section, word)
 
-top_5_words <- merced_counts %>% 
+top_5_words <- merced_counts %>%
+  mutate(word = str_replace(word, "[0-9-]+", NA_character_)) %>% 
+  drop_na() %>% 
   group_by(section) %>% 
-  arrange(-n) %>% 
+  mutate(word = fct_reorder(word,n)) %>% 
+  arrange(-n) %>%
   slice(1:5)
 
 ggplot(data = top_5_words, aes(x= word, y = n)) +
-  geom_col(fill = "blue") +
+  geom_col(aes(fill = n)) +
   facet_wrap(~section, scales = "free") +
-  coord_flip()
+  labs(x= "", y="Number of mentions", fill = "Number of mentions") +
+  coord_flip() +
+  theme_light()
+```
+
+***
+
+We can also look at the most frequently used words across the entire report.
+
+```{r top 50, fig.cap="Figure 2. Top 50  words used in Resilient Merced"}
 
 merced_top50 <- merced_counts %>% 
   arrange(-n) %>% 
   slice(1:50)
 
 ggplot(data = merced_top50, aes(label = word)) +
-  geom_text_wordcloud(aes(color = n, size = n), shape = "square") +
-  scale_size_area() +
-  scale_color_gradientn(colors = c("darkgreen","green")) +
-  theme_minimal()
+  geom_text_wordcloud(aes(color = n, size = n), shape = "circle") +
+  scale_size_area(max_size = 10) +
+  scale_color_gradientn(colors = c("olivedrab3","darkolivegreen","chartreuse4")) +
+  theme_light()
 
 ```
 
-
+Rather unsurprisingly, the most commonly used word is land, followed by carbon and emissions, and the components of "Merced County".
 
 ***  
 ### Sentiment Analysis
 
-```{r sentiment analysis with afinn}
+We can use built-in lexicons to analyze the mood or tone of the report. First, we'll use `afinn` from [Finn Arup Nielson](http://www2.imm.dtu.dk/pubdb/views/publication_details.php?id=6010), which assigns unigrams a score between -5 and +5, indicating negative to positive connotations.
+
+
+```{r sentiment analysis with afinn, fig.cap="Figure 3. Sentiment Values by Section"}
 merced_afinn <- merced_tokens %>% 
   inner_join(get_sentiments("afinn"))
 
 afinn_counts <- merced_afinn %>% 
-  count(section, value)
+  count(section, value) %>% 
+  mutate(section = fct_reorder(section,n))
+
 
 ggplot(data = afinn_counts, aes(x = value, y = n)) +
-  geom_col() +
-  facet_wrap(~section)
+  geom_col(aes(fill=value)) +
+  facet_wrap(~section, scales = "free") +
+  #scale_x_discrete(breaks = c(-2,-1,0,1,2,3,4)) +
+  labs(x="Sentiment Score", y="Number of Words", fill = "Sentiment") +
+  theme_light()
+```
+
+
+```{r mean sentiment analysis with afinn, fig.cap="Figure 4. Mean Sentiment Score for each section of Resilient Merced"}
 
 # Find the mean afinn score by chapter: 
 afinn_means <- merced_afinn %>% 
@@ -147,12 +174,18 @@ afinn_means <- merced_afinn %>%
 
 afinn_plot <- ggplot(data = afinn_means,
        aes(x = section, y = mean_afinn)) +
-  geom_col() +
-  coord_flip()
+  geom_col(aes(fill=section)) +
+  scale_fill_brewer(palette=3) +
+  labs(y="Average Afinn Score", x = "Section") +
+  coord_flip() +
+  theme_light()
+
+afinn_plot
 
 ```
 
-```{r sentiment analysis with bing}
+```{r bing, fig.cap="Figure 5. Sentiment Analysis with Bing Positive/Negative Scores"}
+
 merced_bing <- merced_tokens %>% 
   inner_join(get_sentiments("bing"))
 
@@ -160,8 +193,11 @@ bing_counts <- merced_bing %>%
   count(section, sentiment)
 
 ggplot(data = bing_counts, aes(x = sentiment, y = n)) +
-  geom_col() +
-  facet_wrap(~section)
+  geom_col(aes(fill = sentiment)) +
+  facet_wrap(~section) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(x="Bing Score", y = "Number of Mentions", fill = "Sentiment") +
+  theme_light()
 
 ```
 ```{r sentiment analysis with nrc}

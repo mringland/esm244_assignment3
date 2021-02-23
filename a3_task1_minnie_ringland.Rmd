@@ -46,13 +46,14 @@ ca_subset <- ca_counties %>%
 
 # Plot using geom_sf()
 ggplot(data = ca_subset) +
-  geom_sf(aes(fill = land_area), color = "white", size = 0.1, alpha = 0.5) +
+  geom_sf(aes(fill = land_area), color = "white", size = 0.1) +
   theme_void() +
-  scale_fill_gradientn(colors = c("cyan","blue","purple"))
+  scale_fill_gradientn(colors = c("skyblue2","royalblue3","darkslateblue")) +
+  labs(fill = "Land area (sq meters)")
 
 ```
 
-The coordinate reference system (CRS) used for this dataset is: "`r st_crs(ca_subset)$input`"
+The coordinate reference system (CRS) used for this dataset is: "`r st_crs(ca_subset)$input`", EPSG `r st_crs(ca_subset)$epsg`.
 
 ### Oil Spill Incidence
 
@@ -66,17 +67,17 @@ spill_data <- read_sf(here("ds394","ds394.shp"))
 #spill_data %>% st_crs()
 
 # Use st_transform() to convert CRS
-new_spill_data <- st_transform(spill_data, 3857)
+new_spill_data <- st_transform(spill_data, 3857) #3857
 
 # Then check it: 
 #new_spill_data %>% st_crs()
 ```
 
-Note that this dataset uses a different coordinate reference system (CRS) ("`r st_crs(spill_data)$input`") from the state spatial data, so we need to update it so they match (both "`r st_crs(new_spill_data)$input`"). 
+Note that this dataset uses a different CRS ("`r st_crs(spill_data)$input`") from the state spatial data, so we need to update it so they match (both "`r st_crs(new_spill_data)$input`"). 
 
 Now, we can plot them together! The interactive map below allows you to investigate the location of each incident that took place in 2008:
 
-```{r interative map, fig.cap="**Figure 1.** 2008 Oil Spills in California}
+```{r interative map, fig.cap="**Figure 1.** 2008 Oil Spills in California"}
 #ggplot() +
 #  geom_sf(data = ca_subset) +
 #  geom_sf(data = new_spill_data, size = 1, color = "red")
@@ -85,9 +86,11 @@ Now, we can plot them together! The interactive map below allows you to investig
 tmap_mode(mode = "view")
 
 tm_shape(ca_subset) +
-  tm_fill("land_area", palette = "BuGn") +
+  tm_fill("land_area", palette = "Blues", title="Land area (sq meters)") +
+  tm_borders(col = "white", lwd = 0.5) +
   tm_shape(new_spill_data) +
-  tm_dots()
+  tm_dots() +
+  tm_scale_bar()
 
 ```
 
@@ -95,7 +98,7 @@ tm_shape(ca_subset) +
 
 We might be interested in seeing which counties experienced the most incidents that year. We can use the powerful function `st_join()` to spatially join our datasets so that the spills can be sorted by county. We'll focus on inland events only, and color-code by incident frequency:
 
-```{r spills by county, fig.cap="**Figure 2.** Chloropleth showing counties by spill frequency"}
+```{r spills by county, fig.cap="**Figure 2.** Chloropleth showing counties color-coded by spill frequency"}
 
 spill_by_county <- ca_subset %>% 
   st_join(new_spill_data) %>% # first, spatial join
