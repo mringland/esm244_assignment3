@@ -19,7 +19,7 @@ library(tidyverse) #for everything
 #library(dplyr)
 library(here) # for file reference
 library(tidytext) # for text analysis
-#library(textdata)
+library(textdata)
 library(pdftools) # for reading in PDFs
 library(kableExtra) # for making tables
 library(ggwordcloud) # for wordclouds
@@ -31,7 +31,7 @@ library(ggwordcloud) # for wordclouds
 
 ### About the Report
 
-In 2016, two California senate bills were passed that identified conservation and management of **natural and working lands** as a key strategy to meeting emission goals. In response, the California Air Resources Board ([CARB](https://ww2.arb.ca.gov/nwl-inventory)), which spearheads the state’s climate response, laid out goals to develop a statewide carbon inventory. Later that year, the County of Merced partnered with the state Department of Conservation and The Nature Conservancy to pilot a scenario planning tool to allow individual jurisdictions to quantify and project carbon storage in natural and working lands on a more local level.
+In 2016, two California senate bills were passed that identified conservation and management of **natural and working lands** as a key strategy to meeting emission goals. In response, the California Air Resources Board [CARB](https://ww2.arb.ca.gov/nwl-inventory), which spearheads the state’s climate response, laid out goals to develop a statewide carbon inventory. Later that year, the County of Merced partnered with the state Department of Conservation and The Nature Conservancy to pilot a scenario planning tool to allow individual jurisdictions to quantify and project carbon storage in natural and working lands on a more local level.
 
 This tool is called TerraCount, and the Resilient Merced report describes how the tool was developed, how it can be used, and the results of the study in Merced County.
 
@@ -92,8 +92,12 @@ merced_wordcount <- merced_tokens %>%
   summarize(words = n_distinct(word))
 
 kable(merced_wordcount, caption = "Table 1. Unique non-stopwords in each section of Resilient Merced") %>%
-  kable_styling(width = 5, bootstrap_options = c("striped", "hover"))
+  kable_styling(bootstrap_options = c("striped", "hover"))
 ```
+
+
+We notice that Section 5 has by far the most number of unique words - this makes sense when we look through the document and realize that Section 5 is the longest and contains the bulk of the report information. Other sections introduce data, concepts, workflows, etc.
+
 
 ***  
 ### Most Frequently Used Words
@@ -146,14 +150,15 @@ Rather unsurprisingly, the most commonly used word is land, followed by carbon a
 
 We can use built-in lexicons to analyze the mood or tone of the report. First, we'll use `afinn` from [Finn Arup Nielson](http://www2.imm.dtu.dk/pubdb/views/publication_details.php?id=6010), which assigns unigrams a score between -5 and +5, indicating negative to positive connotations.
 
+We see that all sections are overwhelmingly "positive" with section 5 containing the most "negative words".
 
 ```{r sentiment analysis with afinn, fig.cap="Figure 3. Sentiment Values by Section"}
 merced_afinn <- merced_tokens %>% 
   inner_join(get_sentiments("afinn"))
 
 afinn_counts <- merced_afinn %>% 
-  count(section, value) %>% 
-  mutate(section = fct_reorder(section,n))
+  count(section, value) #%>% 
+  #mutate(section = fct_reorder(section,n))
 
 
 ggplot(data = afinn_counts, aes(x = value, y = n)) +
@@ -174,15 +179,20 @@ afinn_means <- merced_afinn %>%
 
 afinn_plot <- ggplot(data = afinn_means,
        aes(x = section, y = mean_afinn)) +
-  geom_col(aes(fill=section)) +
-  scale_fill_brewer(palette=3) +
-  labs(y="Average Afinn Score", x = "Section") +
+  geom_col(aes(fill=mean_afinn)) +
+  #scale_fill_brewer(palette=3) +
+  labs(y="Average Afinn Score", x = "Section", fill = "Sentiment Score") +
   coord_flip() +
   theme_light()
 
 afinn_plot
 
 ```
+
+Calculating the average `afinn` score for each section, we see that section 2 has the most positive words.
+
+Let's also use the `bing` lexicon from  [Bing Liu and collaborators](https://www.cs.uic.edu/~liub/FBS/sentiment-analysis.html), which also assigns words into positive and negative categories, but only on a binary scale. We see that the same patterns are borne out.
+
 
 ```{r bing, fig.cap="Figure 5. Sentiment Analysis with Bing Positive/Negative Scores"}
 
@@ -196,10 +206,13 @@ ggplot(data = bing_counts, aes(x = sentiment, y = n)) +
   geom_col(aes(fill = sentiment)) +
   facet_wrap(~section) +
   scale_fill_brewer(palette = "Set1") +
-  labs(x="Bing Score", y = "Number of Mentions", fill = "Sentiment") +
+  labs(x="Bing Score", y = "Number of Words", fill = "Sentiment") +
   theme_light()
 
 ```
+
+Finally, let's look at the `nrc` lexicon from [Saif Mohammad and Peter Turney](http://saifmohammad.com/WebPages/NRC-Emotion-Lexicon.htm). This lexicon assigns words to distinct categories of positive, negative, anger, anticipation, disgust, fear, joy, sadness, surprise, and trust.
+
 ```{r sentiment analysis with nrc}
 merced_nrc <- merced_tokens %>% 
   inner_join(get_sentiments("nrc"))
@@ -208,13 +221,20 @@ nrc_counts <- merced_nrc %>%
   count(section, sentiment)
 
 ggplot(data = nrc_counts, aes(x = sentiment, y = n)) +
-  geom_col() +
-  facet_wrap(~section) +
+  geom_col(aes(fill = section)) +
+  facet_wrap(~section, scales = "free") +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x="Number of Words", y = "Sentiment", fill = "section") +
+  theme_light() +
   coord_flip()
 ```
 
+We see that in every chapter, words are dominated by positive sentiment. This makes sense as a report promoting the use of a novel tool that can quantify the carbon sequestration benefits of agricultural land management.
+
 ***
 
-**Data Source:**
+**Data Sources:**
 
-*Resilient Merced: A County Guide to Advance Climate Change Mitigation and Complementary Benefits through Land Management and Conservation.* California Department of Conservation and The Nature Conservancy. Published 2019. Available for download at https://maps.conservation.ca.gov/TerraCount/downloads/
+1. *Resilient Merced: A County Guide to Advance Climate Change Mitigation and Complementary Benefits through Land Management and Conservation.* California Department of Conservation and The Nature Conservancy. Published 2019. Available for download at https://maps.conservation.ca.gov/TerraCount/downloads/
+
+2. *Text Mining with R* Julia Silge and David Robinson. Last built with the bookdown R package on 2020-11-10. Available at https://www.tidytextmining.com/sentiment.html
